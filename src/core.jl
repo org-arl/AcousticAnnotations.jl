@@ -185,7 +185,11 @@ close(adb)
 ```
 """
 function annotate!(adb::ADB, recid, atype; append=false)
-  occursin('-', atype) && throw(ArgumentError("Annotation type cannot contain '-'"))
+  length(atype) > 0 || throw(ArgumentError("Annotation type must not be empty"))
+  occursin('-', atype) && throw(ArgumentError("Annotation type must not contain '-'"))
+  occursin('/', atype) && throw(ArgumentError("Annotation type must not contain '/'"))
+  occursin('\\', atype) && throw(ArgumentError("Annotation type must not contain '\\'"))
+  occursin(':', atype) && throw(ArgumentError("Annotation type must not contain ':'"))
   filename = _annofile(adb, recid, atype)
   df = DataFrame(dts=DateTime[], start=Float64[], duration=Float64[])
   append && isfile(filename) && (df = CSV.read(filename, DataFrame))
