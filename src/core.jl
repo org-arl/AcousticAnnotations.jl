@@ -142,7 +142,7 @@ end
 $(SIGNATURES)
 Get a list of all WAV recordings in a given directory recursively.
 
-# Examples:
+## Example:
 ```julia
 adb = ADB("/path/to/mydb"; recroot="/path/to/recordings")
 for f ∈ wavfiles("/path/to/recordings/20210127")
@@ -184,7 +184,7 @@ end
 $(SIGNATURES)
 Begin annotation.
 
-# Examples:
+## Example:
 ```julia
 adb = ADB("/path/to/mydb")
 a = annotate!(adb, "somerecid", "myanno")
@@ -210,7 +210,7 @@ end
 $(SIGNATURES)
 Begin annotation.
 
-# Examples:
+## Example:
 ```julia
 adb = ADB("/path/to/mydb")
 annotate!(adb, "somerecid", "myanno") do a
@@ -275,16 +275,23 @@ function annotations(adb::ADB, recid, atype)
 end
 
 """
-$(SIGNATURES)
-Get annotations for recordings given by criterion specified using keyword arguments.
+    annotations(adb::ADB, atype; recids)
+    annotations(adb::ADB, atype; location, from, to)
+
+Get annotations for recordings given by criterion specified using keyword arguments. If `recids`
+is specified, annotations for those recordings are fetched. If `location`, `from` and/or `to`
+are specified, all recordinds matching the specified values are fetched.
 """
-function annotations(adb::ADB, atype; location=missing, from=missing, to=missing)
+function annotations(adb::ADB, atype; recids=missing, location=missing, from=missing, to=missing)
   df = DataFrame(recid=String[], dts=DateTime[], start=Float64[], duration=Float64[])
-  b = ones(Bool, size(adb.rec, 1))
-  location === missing || (b .&= adb.rec.location .== location)
-  from === missing || (b .&= adb.rec.dts .≥ from)
-  to === missing || (b .&= adb.rec.dts .≤ to)
-  for recid ∈ adb.rec[b, :recid]
+  if recids === missing
+    b = ones(Bool, size(adb.rec, 1))
+    location === missing || (b .&= adb.rec.location .== location)
+    from === missing || (b .&= adb.rec.dts .≥ from)
+    to === missing || (b .&= adb.rec.dts .≤ to)
+    recids = adb.rec[b, :recid]
+  end
+  for recid ∈ recids
     filename = _annofile(adb, recid, atype)
     if isfile(filename)
       df1 = CSV.read(filename, DataFrame)
@@ -345,7 +352,7 @@ $(SIGNATURES)
 Write metadata associated with recordings. Recommended format for metadata is
 first column with recid, and application-dependent additional columns.
 
-# Examples:
+## Example:
 ```julia
 adb = ADB("/path/to/mydb"; recroot="/path/to/recordings")
 md = metadata(adb)

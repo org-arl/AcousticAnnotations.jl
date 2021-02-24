@@ -134,6 +134,10 @@ end
   @test size(a, 1) == 16
   @test size(annotations(adb, "anno2"; location="Loc1"), 1)  == 1
   @test size(annotations(adb, "anno2"; location="Loc2"), 1) == 15
+  @test size(annotations(adb, "anno2"; recids=[]), 1) == 0
+  @test size(annotations(adb, "anno2"; recids=[id1]), 1) == 1
+  @test size(annotations(adb, "anno2"; recids=[id2]), 1) == 15
+  @test size(annotations(adb, "anno2"; recids=[id1, id2]), 1) == 16
   close(adb)
 end
 
