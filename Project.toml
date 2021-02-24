@@ -1,0 +1,12 @@
+name = "AcousticAnnotations"
+uuid = "0ebb5040-7697-11eb-2387-a509aedd3c14"
+authors = ["Mandar Chitre <mandar@nus.edu.sg>"]
+version = "0.1.0"
+
+[deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
+SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
+WAV = "8149f6b0-98f6-5db9-b78f-408fbbb8ef88"
