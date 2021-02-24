@@ -10,7 +10,7 @@ using DocStringExtensions
 
 export ADB, projectinfo, recordings, recid, wavfiles
 export annotations, annotate!, annotationtypes
-export metadata, metadata!
+export metadata, metadata!, soundclip
 
 include("core.jl")
 

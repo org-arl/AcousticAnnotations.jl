@@ -1,9 +1,7 @@
 import Base.push!
 
 """
-    ADB(root)
-    ADB(root; recroot="/path/to/recordings")
-    ADB(root; create=true)
+    ADB(root; create, recroot)
 
 Open annotations database. If `create` is set to `true`, a new database is created
 if none exists at the given root location. If a `recroot` is provided, it is used as
@@ -96,8 +94,12 @@ Get recID from recording file.
 """
 function recid(filename)
   lowercase(last(splitext(filename))) == ".wav" || throw(ArgumentError("Only WAV recordings are supported"))
+  sz = filesize(filename)
+  buf = UInt8[]
+  append!(buf, reinterpret(UInt8, [sz]))
   open(filename) do io
-    bytes2hex(sha2_256(io))
+    append!(buf, read(io, 16384))
+    bytes2hex(sha2_256(buf))
   end
 end
 
@@ -118,10 +120,10 @@ $(TYPEDSIGNATURES)
 Add recording to annotations database. Returns recID.
 """
 function Base.push!(adb::ADB, filename, device, location)
-  filename = relpath(filename, adb.recroot)
+  filename = relpath(abspath(filename), adb.recroot)
   if filename ∈ adb.rec.path
     id = first(adb.rec.recid[adb.rec.path .== filename])
-    @warn "Duplicate recording $(id) $(filename) ignored"
+    @warn "Duplicate recording $(id) ($(filename)) ignored"
     return id
   end
   id = recid(adb, filename)
@@ -131,9 +133,9 @@ function Base.push!(adb::ADB, filename, device, location)
   end
   f = joinpath(adb.recroot, filename)
   dts = unix2datetime(round(Int64, ctime(f)))
-  _, fs = wavread(f, format="native", subrange=1)
-  sz = wavread(f, format="size")
-  push!(adb.rec, (id, filename, dts, size(sz, 1)/fs, device, location))
+  _, fs, _, _ = wavread(f; format="native", subrange=1)
+  sz = wavread(f; format="size")
+  push!(adb.rec, (id, filename, dts, sz[1]/fs, device, location))
   adb.recdirty[] = true
   id
 end
@@ -270,8 +272,11 @@ Get annotations for a specific recording.
 """
 function annotations(adb::ADB, recid, atype)
   filename = _annofile(adb, recid, atype)
-  isfile(filename) || return DataFrame(dts=DateTime[], start=Float64[], duration=Float64[])
-  CSV.read(filename, DataFrame)
+  df = DataFrame(dts=DateTime[], recid=[], start=Float64[], duration=Float64[])
+  isfile(filename) || return df
+  df1 = CSV.read(filename, DataFrame)
+  df1.recid = repeat([recid], size(df1, 1))
+  append!(df, df1; cols=:union)
 end
 
 """
@@ -283,7 +288,7 @@ is specified, annotations for those recordings are fetched. If `location`, `from
 are specified, all recordinds matching the specified values are fetched.
 """
 function annotations(adb::ADB, atype; recids=missing, location=missing, from=missing, to=missing)
-  df = DataFrame(recid=String[], dts=DateTime[], start=Float64[], duration=Float64[])
+  df = DataFrame(dts=DateTime[], recid=String[], start=Float64[], duration=Float64[])
   if recids === missing
     b = ones(Bool, size(adb.rec, 1))
     location === missing || (b .&= adb.rec.location .== location)
@@ -368,3 +373,41 @@ function metadata!(adb::ADB, md::DataFrame)
   filename = joinpath(adb.root, "metadata.csv")
   CSV.write(filename, md)
 end
+
+"""
+$(SIGNATURES)
+Get sound clip from recording. Returns data and sampling rate.
+
+### Example:
+```julia
+adb = ADB("/path/to/mydb")
+samples, fs = soundclip(adb, "myrecid"; duration=1.0)
+close(adb)
+```
+"""
+function soundclip(adb::ADB, recid; start=0.0, duration=Inf64)
+  recs = adb.rec[adb.rec.recid .== recid, :]
+  size(recs, 1) != 1 && throw(ArgumentError("No such recording"))
+  filename = joinpath(adb.recroot, first(recs.path))
+  if !isfile(filename)
+    @warn "Recording $(filename) not found"
+    return missing
+  end
+  local data
+  local fs
+  if start == 0.0 && duration == Inf64
+    data, fs = wavread(filename; format="double")
+  else
+    _, fs = wavread(filename; format="native", subrange=1)
+    duration = min(first(recs.duration) - start, duration)
+    r = floor(Int, start * fs + 1) : floor(Int, (start + duration) * fs)
+    data, fs = wavread(filename; format="double", subrange=r)
+  end
+  data, fs
+end
+
+"""
+$(SIGNATURES)
+Get sound clip for annotation from recording.
+"""
+soundclip(adb::ADB, rec::DataFrameRow) = soundclip(adb, rec.recid; start=rec.start, duration=rec.duration)

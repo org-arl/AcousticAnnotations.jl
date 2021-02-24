@@ -84,7 +84,7 @@ end
   @test annotations(adb, id2, "anno1") isa DataFrame
   @test size(annotations(adb, id2, "anno1"), 1) == 0
   a = annotations(adb, id1, "anno1")
-  @test propertynames(a) == [:dts, :start, :duration, :remark]
+  @test propertynames(a) == [:dts, :recid, :start, :duration, :remark]
   @test a[1,:dts] isa DateTime
   @test a[1,:start] == 1.5
   @test a[1,:duration] == 1.0
@@ -93,7 +93,7 @@ end
   @test size(annotations(adb, id1, "anno1"), 1) == 2
   @test size(annotations(adb, id2, "anno1"), 1) == 0
   a = annotations(adb, id1, "anno1")
-  @test propertynames(a) == [:dts, :start, :duration, :remark, :newcol]
+  @test propertynames(a) == [:dts, :recid, :start, :duration, :remark, :newcol]
   @test a[1,:newcol] === missing
   @test a[2,:start] == 2.0
   @test a[2,:duration] == 1.2
@@ -108,10 +108,10 @@ end
   @test length(annotationtypes(adb, id1)) == 2
   @test length(annotationtypes(adb, id2)) == 1
   a = annotations(adb, id1, "anno2")
-  @test propertynames(a) == [:dts, :start, :duration, :remark]
+  @test propertynames(a) == [:dts, :recid, :start, :duration, :remark]
   @test size(a, 1) == 1
   a = annotations(adb, id2, "anno2")
-  @test propertynames(a) == [:dts, :start, :duration, :remark]
+  @test propertynames(a) == [:dts, :recid, :start, :duration, :remark]
   @test size(a, 1) == 1
   annotate!(adb, id2, "anno2") do a
     for j ∈ 1:10
@@ -119,7 +119,7 @@ end
     end
   end
   a = annotations(adb, id2, "anno2")
-  @test propertynames(a) == [:dts, :start, :duration]
+  @test propertynames(a) == [:dts, :recid, :start, :duration]
   @test size(a, 1) == 10
   annotate!(adb, id2, "anno2"; append=true) do a
     for j ∈ 1:5
@@ -127,10 +127,10 @@ end
     end
   end
   a = annotations(adb, id2, "anno2")
-  @test propertynames(a) == [:dts, :start, :duration, :newcol]
+  @test propertynames(a) == [:dts, :recid, :start, :duration, :newcol]
   @test size(a, 1) == 15
   a = annotations(adb, "anno2")
-  @test propertynames(a) == [:recid, :dts, :start, :duration, :remark, :newcol]
+  @test propertynames(a) == [:dts, :recid, :start, :duration, :remark, :newcol]
   @test size(a, 1) == 16
   @test size(annotations(adb, "anno2"; location="Loc1"), 1)  == 1
   @test size(annotations(adb, "anno2"; location="Loc2"), 1) == 15
@@ -162,5 +162,41 @@ end
   @test md isa DataFrame
   @test size(md) == (2, 2)
   @test propertynames(md) == [:recid, :temperature]
+  close(adb)
+end
+
+@testset "soundclips" begin
+  dbroot = tempname()
+  adb = ADB(dbroot; create=true)
+  mkpath(joinpath(dbroot, "recordings"))
+  cp("test1.wav", joinpath(dbroot, "recordings/test1.wav"))
+  cp("test2.wav", joinpath(dbroot, "recordings/test2.wav"))
+  id1 = push!(adb, joinpath(dbroot, "recordings/test1.wav"), "Zoom", "Loc1")
+  id2 = push!(adb, joinpath(dbroot, "recordings/test2.wav"), "Zoom", "Loc2")
+  data, fs = soundclip(adb, id1)
+  @test fs == 44100.0f0
+  @test size(data) == (132091, 1)
+  data, fs = soundclip(adb, id2; duration=1.0)
+  @test fs == 44100.0f0
+  @test size(data) == (44100, 1)
+  data, fs = soundclip(adb, id2; start=1.0, duration=1.0)
+  @test fs == 44100.0f0
+  @test size(data) == (44100, 1)
+  data, fs = soundclip(adb, id1; start=1.0)
+  @test fs == 44100.0f0
+  @test size(data) == (132090 - 44100, 1)
+  annotate!(adb, id1, "anno1", 1.2, 1.5; remark="works")
+  a = annotations(adb, id1, "anno1")
+  data, fs = soundclip(adb, first(a))
+  @test fs == 44100.0f0
+  @test size(data) == (66150, 1)
+  close(adb)
+  adb = ADB(dbroot; recroot="wrong")
+  @test soundclip(adb, id1) === missing
+  @test soundclip(adb, id2) === missing
+  close(adb)
+  adb = ADB(dbroot)
+  @test soundclip(adb, id1) !== missing
+  @test soundclip(adb, id2) !== missing
   close(adb)
 end
