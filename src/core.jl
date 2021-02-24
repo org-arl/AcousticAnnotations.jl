@@ -1,3 +1,5 @@
+import Base.push!
+
 """
     ADB(root)
     ADB(root; recroot="/path/to/recordings")
@@ -19,10 +21,10 @@ struct ADB
     recroot = expanduser(recroot)
     local rec
     if isdir(root)
-      isfile(joinpath(root, "recordings.csv")) || error("Bad annotations database format: recordings.csv not found")
+      isfile(joinpath(root, "recordings.csv")) || throw(ArgumentError("Bad annotations database format: recordings.csv not found"))
       rec = CSV.read(joinpath(root, "recordings.csv"), DataFrame)
     else
-      create || error("Annotations database not found at $(root)")
+      create || throw(ArgumentError("Annotations database not found at $(root)"))
       rec = _initADB(root, basename(root))
     end
     new(root, recroot, rec, Ref(false))
@@ -70,10 +72,30 @@ Base.close(adb::ADB) = flush(adb)
 
 """
 $(SIGNATURES)
+Get project metadata.
+"""
+function projectinfo(adb::ADB)
+  md = Dict{String,String}()
+  state = :init
+  for s ∈ eachline(joinpath(adb.root, "README.md"))
+    if state === :init
+      s != "---" && return nothing
+      state = :yaml
+    elseif state === :yaml
+      s == "---" && return md
+      s1, s2 = split(s, ':')
+      md[strip(s1)] = strip(s2)
+    end
+  end
+  nothing
+end
+
+"""
+$(SIGNATURES)
 Get recID from recording file.
 """
 function recid(filename)
-  lowercase(last(splitext(filename))) == ".wav" || error("Only WAV recordings are supported")
+  lowercase(last(splitext(filename))) == ".wav" || throw(ArgumentError("Only WAV recordings are supported"))
   open(filename) do io
     bytes2hex(sha2_256(io))
   end
@@ -129,4 +151,167 @@ function wavfiles(dirname)
     end
   end
   wavs
+end
+
+struct Annotations
+  recid::String
+  atype::String
+  df::DataFrame
+  filename::String
+end
+
+Base.show(io::IO, a::Annotations) = print(io, "Annotations $(atype) on $(recid)")
+
+function _annofile(adb::ADB, recid, atype)
+  dts = adb.rec[adb.rec.recid .== recid, :dts]
+  length(dts) != 1 && throw(ArgumentError("No such recording"))
+  s = Dates.format(first(dts), "yyyymmdd")
+  atype === nothing && return joinpath(adb.root, "annotations", s, "$(recid)-")
+  joinpath(adb.root, "annotations", s, "$(recid)-$(atype).csv")
+end
+
+"""
+$(SIGNATURES)
+Begin annotation.
+
+# Examples:
+```julia
+adb = ADB("mydb")
+a = annotate!(adb, "somerecid", "myanno")
+push!(a, 3.0, 1.0; remark="Interesting sound")
+push!(a, 7.0, 1.0; remark="Another interesting sound")
+close(a)
+close(adb)
+```
+"""
+function annotate!(adb::ADB, recid, atype; append=false)
+  occursin('-', atype) && throw(ArgumentError("Annotation type cannot contain '-'"))
+  filename = _annofile(adb, recid, atype)
+  df = DataFrame(dts=DateTime[], start=Float64[], duration=Float64[])
+  append && isfile(filename) && (df = CSV.read(filename, DataFrame))
+  Annotations(recid, atype, df, filename)
+end
+
+"""
+$(SIGNATURES)
+Begin annotation.
+
+# Examples:
+```julia
+adb = ADB("mydb")
+annotate!(adb, "somerecid", "myanno") do a
+  push!(a, 3.0, 1.0; remark="Interesting sound")
+  push!(a, 7.0, 1.0; remark="Another interesting sound")
+end
+close(adb)
+"""
+function annotate!(cb, adb::ADB, recid, atype; append=false)
+  a = annotate!(adb, recid, atype; append=append)
+  try
+    cb(a)
+  finally
+    close(a)
+  end
+end
+
+"""
+$(SIGNATURES)
+Add single annotation.
+"""
+function annotate!(adb::ADB, recid, atype, start, duration; kwargs...)
+  a = annotate!(adb, recid, atype; append=true)
+  push!(a, start, duration; kwargs...)
+  close(a)
+end
+
+"""
+$(TYPEDSIGNATURES)
+Add annotation.
+"""
+function push!(a::Annotations, start, duration; kwargs...)
+  row = Dict(:dts => now(), :start => start, :duration => duration)
+  length(kwargs) > 0 && merge!(row, kwargs)
+  push!(a.df, row; cols=:union)
+end
+
+"""
+$(TYPEDSIGNATURES)
+Flush annotations to disk.
+"""
+function Base.flush(a::Annotations)
+  mkpath(dirname(a.filename))
+  CSV.write(a.filename, a.df)
+  nothing
+end
+
+"""
+$(TYPEDSIGNATURES)
+End annotation and flush to disk.
+"""
+Base.close(a::Annotations) = flush(a)
+
+"""
+$(SIGNATURES)
+Get annotations for a specific recording.
+"""
+function annotations(adb::ADB, recid, atype)
+  filename = _annofile(adb, recid, atype)
+  isfile(filename) || return DataFrame(dts=DateTime[], start=Float64[], duration=Float64[])
+  CSV.read(filename, DataFrame)
+end
+
+"""
+$(SIGNATURES)
+Get annotations for recordings given by criterion specified using keyword arguments.
+"""
+function annotations(adb::ADB, atype; location=missing, from=missing, to=missing)
+  df = DataFrame(recid=String[], dts=DateTime[], start=Float64[], duration=Float64[])
+  b = ones(Bool, size(adb.rec, 1))
+  location === missing || (b .&= adb.rec.location .== location)
+  from === missing || (b .&= adb.rec.dts .≥ from)
+  to === missing || (b .&= adb.rec.dts .≤ to)
+  for recid ∈ adb.rec[b, :recid]
+    filename = _annofile(adb, recid, atype)
+    if isfile(filename)
+      df1 = CSV.read(filename, DataFrame)
+      df1.recid = repeat([recid], size(df1, 1))
+      append!(df, df1; cols=:union)
+    end
+  end
+  df
+end
+
+"""
+$(SIGNATURES)
+Get a list of annotation types.
+"""
+function annotationtypes(adb::ADB)
+  anno = Set{String}()
+  for (root, dirs, files) ∈ walkdir(joinpath(adb.root, "annotations"))
+    for f ∈ files
+      if occursin('-', f) && endswith(f, ".csv")
+        ndx = findlast('-', f)
+        push!(anno, f[ndx+1:end-4])
+      end
+    end
+  end
+  anno
+end
+
+"""
+$(SIGNATURES)
+Get a list of annotation types for a recording.
+"""
+function annotationtypes(adb::ADB, recid)
+  anno = Set{String}()
+  pat = _annofile(adb, recid, nothing)
+  fpat = basename(pat)
+  if isdir(dirname(pat))
+    for f ∈ readdir(dirname(pat))
+      if startswith(f, fpat) && endswith(f, ".csv")
+        push!(anno, f[length(fpat)+1:end-4])
+      end
+    end
+  end
+  anno
 end

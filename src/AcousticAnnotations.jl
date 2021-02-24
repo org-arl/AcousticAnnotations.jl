@@ -8,8 +8,9 @@ using WAV
 
 using DocStringExtensions
 
-export ADB, projectinfo, recordings, metadata, annotations, annotate!
-export recid, wavfiles
+export ADB, projectinfo, recordings, recid, wavfiles
+export annotations, annotate!, annotationtypes
+export metadata
 
 include("core.jl")
 
