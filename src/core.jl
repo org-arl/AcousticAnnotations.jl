@@ -115,18 +115,19 @@ recordings(adb::ADB) = adb.rec
 
 """
 $(TYPEDSIGNATURES)
-Add recording to annotations database.
+Add recording to annotations database. Returns recID.
 """
 function Base.push!(adb::ADB, filename, device, location)
   filename = relpath(filename, adb.recroot)
   if filename ∈ adb.rec.path
-    @warn "Duplicate recording $(filename) ignored"
-    return adb
+    id = first(adb.rec.recid[adb.rec.path .== filename])
+    @warn "Duplicate recording $(id) $(filename) ignored"
+    return id
   end
   id = recid(adb, filename)
   if id ∈ adb.rec.recid
     @warn "Duplicate recording $(id) ($(filename)) ignored"
-    return adb
+    return id
   end
   f = joinpath(adb.recroot, filename)
   dts = unix2datetime(round(Int64, ctime(f)))
@@ -134,12 +135,21 @@ function Base.push!(adb::ADB, filename, device, location)
   sz = wavread(f, format="size")
   push!(adb.rec, (id, filename, dts, size(sz, 1)/fs, device, location))
   adb.recdirty[] = true
-  adb
+  id
 end
 
 """
 $(SIGNATURES)
 Get a list of all WAV recordings in a given directory recursively.
+
+# Examples:
+```julia
+adb = ADB("/path/to/mydb"; recroot="/path/to/recordings")
+for f ∈ wavfiles("/path/to/recordings/20210127")
+  push!(adb, f, "Zoom", "Clementi")
+end
+close(adb)
+```
 """
 function wavfiles(dirname)
   wavs = String[]
@@ -176,7 +186,7 @@ Begin annotation.
 
 # Examples:
 ```julia
-adb = ADB("mydb")
+adb = ADB("/path/to/mydb")
 a = annotate!(adb, "somerecid", "myanno")
 push!(a, 3.0, 1.0; remark="Interesting sound")
 push!(a, 7.0, 1.0; remark="Another interesting sound")
@@ -202,7 +212,7 @@ Begin annotation.
 
 # Examples:
 ```julia
-adb = ADB("mydb")
+adb = ADB("/path/to/mydb")
 annotate!(adb, "somerecid", "myanno") do a
   push!(a, 3.0, 1.0; remark="Interesting sound")
   push!(a, 7.0, 1.0; remark="Another interesting sound")
@@ -318,4 +328,36 @@ function annotationtypes(adb::ADB, recid)
     end
   end
   anno
+end
+
+"""
+$(SIGNATURES)
+Get metadata associated with recordings.
+"""
+function metadata(adb::ADB)
+  filename = joinpath(adb.root, "metadata.csv")
+  isfile(filename) || return DataFrame(recid=String[])
+  CSV.read(filename, DataFrame)
+end
+
+"""
+$(SIGNATURES)
+Write metadata associated with recordings. Recommended format for metadata is
+first column with recid, and application-dependent additional columns.
+
+# Examples:
+```julia
+adb = ADB("/path/to/mydb"; recroot="/path/to/recordings")
+md = metadata(adb)
+for f ∈ wavfiles("/path/to/recordings/20210127")
+  id = push!(adb, f, "Zoom", "Clementi")
+  push!(md, Dict(:recid => id, :temperature => 25 + 5 * randn()); cols=:union)
+end
+metadata!(adb, md)
+close(adb)
+```
+"""
+function metadata!(adb::ADB, md::DataFrame)
+  filename = joinpath(adb.root, "metadata.csv")
+  CSV.write(filename, md)
 end

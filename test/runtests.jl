@@ -136,3 +136,27 @@ end
   @test size(annotations(adb, "anno2"; location="Loc2"), 1) == 15
   close(adb)
 end
+
+@testset "metadata" begin
+  dbroot = tempname()
+  adb = ADB(dbroot; create=true, recroot=".")
+  md = metadata(adb)
+  @test md isa DataFrame
+  @test size(md) == (0, 1)
+  for f ∈ wavfiles(".")
+    id = push!(adb, f, "Zoom", "Clementi")
+    push!(md, Dict(:recid => id, :temperature => 25 + 5 * randn()); cols=:union)
+  end
+  metadata!(adb, md)
+  md = metadata(adb)
+  @test md isa DataFrame
+  @test size(md) == (2, 2)
+  @test propertynames(md) == [:recid, :temperature]
+  close(adb)
+  adb = ADB(dbroot; create=true)
+  md = metadata(adb)
+  @test md isa DataFrame
+  @test size(md) == (2, 2)
+  @test propertynames(md) == [:recid, :temperature]
+  close(adb)
+end
