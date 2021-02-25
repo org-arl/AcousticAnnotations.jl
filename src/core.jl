@@ -119,7 +119,7 @@ recordings(adb::ADB) = adb.rec
 $(TYPEDSIGNATURES)
 Add recording to annotations database. Returns recID.
 """
-function Base.push!(adb::ADB, filename, device, location)
+function Base.push!(adb::ADB, filename, device, location; dts=nothing)
   filename = relpath(abspath(filename), adb.recroot)
   if filename ∈ adb.rec.path
     id = first(adb.rec.recid[adb.rec.path .== filename])
@@ -132,7 +132,7 @@ function Base.push!(adb::ADB, filename, device, location)
     return id
   end
   f = joinpath(adb.recroot, filename)
-  dts = unix2datetime(round(Int64, ctime(f)))
+  dts === nothing && (dts = unix2datetime(round(Int64, ctime(f))))
   _, fs, _, _ = wavread(f; format="native", subrange=1)
   sz = wavread(f; format="size")
   push!(adb.rec, (id, filename, dts, sz[1]/fs, device, location))
