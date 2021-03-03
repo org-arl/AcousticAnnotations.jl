@@ -7,7 +7,7 @@ This package is for ARL internal use only at present and is therefore not a regi
 To install:
 ```julia
 using Pkg
-Pkg.add("https://github.com/org-arl/AcousticAnnotations.jl")
+Pkg.add(url="https://github.com/org-arl/AcousticAnnotations.jl")
 ```
 and then to use it:
 ```julia
@@ -18,7 +18,7 @@ using AcousticAnnotations
 
 To create a new annotations database:
 ```julia
-adb = ADB("/path/to/dbfolder"; create=true, recroot="/path/to/acoutic/recordings")
+adb = ADB("/path/to/dbfolder"; create=true, recroot="/path/to/acoustic/recordings")
 ```
 This creates a new database in a folder `/path/to/dbfolder`. This folder can be committed to a `git`
 repository directly. The database only holds annotations and metadata (as CSV or markdown files).
@@ -28,11 +28,11 @@ The acoustic recordings are assumed to be available at the path given by `recroo
 
 Recordings can be individually added using `push!()`:
 ```julia
-push!(adb, "/path/to/acoutic/recordings/somerec.wav", "LS1", "Sisters Island")
+push!(adb, "/path/to/acoustic/recordings/somerec.wav", "LS1", "Sisters Island")
 ```
 If you have a folder full of recordings, you can bulk add them:
 ```julia
-for f ∈ wavfiles("/path/to/acoutic/recordings/20210127")
+for f ∈ wavfiles("/path/to/acoustic/recordings/20210127")
   push!(adb, f, "LS1", "Sisters Island")
 end
 ```
@@ -46,7 +46,7 @@ Each recording is associated with a unique recording ID (`recID`) that is genera
 wav file. This allows the database to detect duplicate recordings (which it will disallow adding). You can
 generate a `recID` for any wav file you may have:
 ```julia
-julia> recid("/path/to/acoutic/recordings/somerec.wav")
+julia> recid("/path/to/acoustic/recordings/somerec.wav")
 "37c196e889ae1bb487a7c5c99632a051ce0ae556d44a717dadffb6f29bc5d683"
 ```
 
@@ -54,7 +54,7 @@ julia> recid("/path/to/acoutic/recordings/somerec.wav")
 
 A database can be opened with the `ADB()` function:
 ```julia
-adb = ADB("/path/to/dbfolder"; recroot="/path/to/acoutic/recordings")
+adb = ADB("/path/to/dbfolder"; recroot="/path/to/acoustic/recordings")
 ```
 If the `recroot` is not specified, it defaults to the `recordings` folder inside the database folder.
 This folder is added to `.gitinore`, so that it is not checked in by `git`, but can be used for storing
