@@ -175,9 +175,10 @@ end
 Base.show(io::IO, a::Annotations) = print(io, "Annotations $(atype) on $(recid)")
 
 function _annofile(adb::ADB, recid, atype)
-  dts = adb.rec[adb.rec.recid .== recid, :dts]
-  length(dts) != 1 && throw(ArgumentError("No such recording"))
-  s = Dates.format(first(dts), "yyyymmdd")
+  index = findfirst(isequal(recid), adb.rec.recid)
+  isnothing(index) && throw(ArgumentError("No such recording"))
+  dts = adb.rec[index, :dts]
+  s = Dates.format(dts, "yyyymmdd")
   atype === nothing && return joinpath(adb.root, "annotations", s, "$(recid)-")
   joinpath(adb.root, "annotations", s, "$(recid)-$(atype).csv")
 end
