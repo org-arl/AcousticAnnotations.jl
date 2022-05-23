@@ -98,7 +98,7 @@ end
   @test a[2,:start] == 2.0
   @test a[2,:duration] == 1.2
   @test a[2,:remark] == "works too!"
-  @test a[2,:newcol] === "new column"
+  @test a[2,:newcol] == "new column"
   @test length(annotationtypes(adb)) == 1
   @test length(annotationtypes(adb, id1)) == 1
   @test length(annotationtypes(adb, id2)) == 0
