@@ -182,6 +182,11 @@ function _annofile(adb::ADB, recid, atype)
   atype === nothing && return joinpath(adb.root, "annotations", s, "$(recid)-")
   joinpath(adb.root, "annotations", s, "$(recid)-$(atype).csv")
 end
+function _annofile(adb::ADB, dts::DateTime, recid, atype)
+  s = Dates.format(dts, "yyyymmdd")
+  atype === nothing && return joinpath(adb.root, "annotations", s, "$(recid)-")
+  joinpath(adb.root, "annotations", s, "$(recid)-$(atype).csv")
+end
 
 """
 $(SIGNATURES)
@@ -296,9 +301,17 @@ function annotations(adb::ADB, atype; recids=missing, location=missing, from=mis
     from === missing || (b .&= adb.rec.dts .≥ from)
     to === missing || (b .&= adb.rec.dts .≤ to)
     recids = adb.rec[b, :recid]
+    dts = adb.rec[b, :dts]
+  else
+    dts = DateTime[]
+    for recid ∈ recids
+      index = findfirst(recid .== adb.rec.recid)
+      isnothing(index) && throw(ArgumentError("No such recording"))
+      push!(dts, adb.rec[index, :dts])
+    end
   end
-  for recid ∈ recids
-    filename = _annofile(adb, recid, atype)
+  for (dt, recid) ∈ zip(dts, recids)
+    filename = _annofile(adb::ADB, dt, recid, atype)
     if isfile(filename)
       df1 = CSV.read(filename, DataFrame)
       df1.recid = repeat([recid], size(df1, 1))
